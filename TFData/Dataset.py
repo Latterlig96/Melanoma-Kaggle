@@ -110,7 +110,7 @@ class Dataset:
         return image,label
     
     def load_dataset(self,filename,
-                          labeled=False,
+                          labeled=True,
                           ordered=False):
         """
             Loading dataset from tfrecord

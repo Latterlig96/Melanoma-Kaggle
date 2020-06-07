@@ -66,6 +66,7 @@ class ModelCreation:
         """
         input_tensor = Input(shape=self.input_shape)
         base_model = efn.EfficientNetB5(include_top=False,input_tensor=input_tensor)
+        x = base_model(input_tensor)
         if linear:
             x = Dense(2048,activation='linear')(base_model)
             x = Dense(self.output_shape,activation='sigmoid')(x)
@@ -74,9 +75,9 @@ class ModelCreation:
             model.summary()
             return model
         else:
-            out1 = GlobalAveragePooling2D()(base_model)
-            out2 = GlobalMaxPooling2D()(base_model)
-            out3 = Flatten()(base_model)
+            out1 = GlobalAveragePooling2D()(x)
+            out2 = GlobalMaxPooling2D()(x)
+            out3 = Flatten()(x)
             out = Concatenate(axis=-1)([out1,out2,out3])
             out = Dropout(0.5)(out)
             out = Dense(self.output_shape,activation='sigmoid')(out)
@@ -96,22 +97,23 @@ class ModelCreation:
         """
         input_tensor = Input(shape=self.input_shape)
         base_model = NASNetMobile(include_top=False,input_tensor=input_tensor)
+        x = base_model(input_tensor)
         if linear:
-            x = Dense(2048,activation='linear')(base_model)
+            x = Dense(2048,activation='linear')(x)
             x = Dense(self.output_shape,activation='sigmoid')(x)
             model = Model(input_tensor,x)
             model.compile(optimizer=Adam(self.learning_rate),loss=binary_crossentropy,metrics=['acc'])
             model.summary()
             return model 
         else:
-            out1 = GlobalAveragePooling2D()(base_model)
-            out2 = GlobalMaxPooling2D()(base_model)
-            out3 = Flatten()(base_model)
+            out1 = GlobalAveragePooling2D()(x)
+            out2 = GlobalMaxPooling2D()(x)
+            out3 = Flatten()(x)
             out = Concatenate(axis=-1)([out1,out2,out3])
             out = Dropout(0.5)(out)
             out = Dense(self.output_shape,activation='sigmoid')(out)
             model = Model(input_tensor,out)
-            model.compile(optimizer=Adam(learning_rate),loss=binary_crossentropy,metrics=['acc'])
+            model.compile(optimizer=Adam(self.learning_rate),loss=binary_crossentropy,metrics=['acc'])
             model.summary()
             return model 
     
