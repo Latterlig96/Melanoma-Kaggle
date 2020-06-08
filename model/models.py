@@ -5,8 +5,6 @@ from tensorflow.keras.layers import Dense,Dropout,Flatten,Input
 from tensorflow.keras.models import Model
 from tensorflow.keras.callbacks import Callback
 from tensorflow.keras.applications.nasnet import NASNetMobile,preprocess_input
-from tensorflow.keras.losses import binary_crossentropy
-from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.mixed_precision import experimental as mixed_precision
 import os 
 import efficientnet.tfkeras as efn
@@ -19,6 +17,9 @@ class ModelCreation:
                 learning_rate,
                 input_shape,
                 output_shape,
+                optimizer,
+                metric,
+                loss,
                 model_data_dir='./saved_models/',
                 linear = None,
                 verbose = False):
@@ -29,6 +30,9 @@ class ModelCreation:
                 - learning_rate - learning_rate to initialize training
                 - input_shape - image input shape. 
                 - output_shape - shape of the output
+                - optimizer - tensorflow compatibile optimizer
+                - metric - tensorflow compatibile metric
+                - loss - tensorflow loss compatible loss 
                 - model_data_dir - data dir to save model/weights
                 - linear - whether to use linear activation function 
                             and try another architecture
@@ -38,6 +42,9 @@ class ModelCreation:
                 self.learning_rate = learning_rate 
                 self.input_shape = input_shape
                 self.output_shape = output_shape
+                self.optimizer = optimizer
+                self.metric = metric
+                self.loss = loss 
                 self.model_data_dir = model_data_dir
                 self.linear = linear 
                 self.verbose = verbose
@@ -68,10 +75,13 @@ class ModelCreation:
         base_model = efn.EfficientNetB5(include_top=False,input_tensor=input_tensor)
         x = base_model(input_tensor)
         if linear:
-            x = Dense(2048,activation='linear')(base_model)
+            x = GlobalAveragePooling2D()(x)
+            x = Dense(2048,activation='linear')(x)
             x = Dense(self.output_shape,activation='sigmoid')(x)
             model = Model(input_tensor,x)
-            model.compile(optimizer=Adam(self.learning_rate),loss=binary_crossentropy,metrics=['acc'])
+            model.compile(optimizer=self.optimizer(self.learning_rate),
+                          loss=self.loss,
+                          metrics=[self.metric])
             model.summary()
             return model
         else:
@@ -82,7 +92,9 @@ class ModelCreation:
             out = Dropout(0.5)(out)
             out = Dense(self.output_shape,activation='sigmoid')(out)
             model = Model(input_tensor,out)
-            model.compile(optimizer=Adam(self.learning_rate),loss=binary_crossentropy,metrics=['acc'])
+            model.compile(optimizer=self.optimizer(self.learning_rate),
+                          loss=self.loss,
+                          metrics=[self.metric])
             model.summary()
             return model
 
@@ -99,10 +111,13 @@ class ModelCreation:
         base_model = NASNetMobile(include_top=False,input_tensor=input_tensor)
         x = base_model(input_tensor)
         if linear:
+            x = GlobalAveragePooling2D()(x)
             x = Dense(2048,activation='linear')(x)
             x = Dense(self.output_shape,activation='sigmoid')(x)
             model = Model(input_tensor,x)
-            model.compile(optimizer=Adam(self.learning_rate),loss=binary_crossentropy,metrics=['acc'])
+            model.compile(optimizer=self.optimizer(self.learning_rate),
+                          loss=self.loss,
+                          metrics=[self.metric])
             model.summary()
             return model 
         else:
@@ -113,7 +128,9 @@ class ModelCreation:
             out = Dropout(0.5)(out)
             out = Dense(self.output_shape,activation='sigmoid')(out)
             model = Model(input_tensor,out)
-            model.compile(optimizer=Adam(self.learning_rate),loss=binary_crossentropy,metrics=['acc'])
+            model.compile(optimizer=self.optimizer(self.learning_rate),
+                          loss=self.loss,
+                          metrics=[self.metric])
             model.summary()
             return model 
     
@@ -143,3 +160,16 @@ class ModelCreation:
         """
         policy = mixed_precision.Policy('mixed_float16')
         mixed_precision.set_policy(policy)
+    
+    def inject_callbacks(self,callbacks):
+        """
+            Injecting callbacks to model.
+            Args:
+            - callbacks - callbacks to be injected to model 
+            Returns:
+            - list of callbacks.
+        """
+        self.callbacks = [] 
+        for callback in callbacks:
+            self.callbacks.append(callbacks)
+        return self.callbacks

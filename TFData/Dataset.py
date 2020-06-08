@@ -1,6 +1,6 @@
 import tensorflow as tf 
 import math 
-
+import numpy as np 
 class Dataset:
 
     def __init__(self,
@@ -9,7 +9,8 @@ class Dataset:
                 validation_split,
                 image_size,
                 dataset_size,
-                batch_size):
+                batch_size,
+                resize_shape = None):
         
         """
            Args:
@@ -20,6 +21,7 @@ class Dataset:
            - image_size - image_size in tfrecord
            - dataset_size - number of examples in trainingset
            - batch_size - height of batch_size
+           - resize_shape - shape to which you want to resize your images - tuple [width,height]
         """
         
         self.train_files = train_files
@@ -28,6 +30,7 @@ class Dataset:
         self.image_size = image_size
         self.dataset_size = dataset_size
         self.batch_size = batch_size 
+        self.resize_shape = resize_shape
 
     def decode_image(self,
                         img):
@@ -88,8 +91,7 @@ class Dataset:
 
     def data_augment_and_resize(self,
                     image,
-                    label,
-                    resize_shape = [512,512]):
+                    label):
         """
             Simple Data Augmentation that is compatible with tensorflow 
             and also added resize to compress the image a little bit 
@@ -105,8 +107,8 @@ class Dataset:
         """
         image = tf.image.random_flip_left_right(image)
         image = tf.image.adjust_brightness(image,0.3)
-        if resize_shape != None:
-            image = tf.image.resize(image,[*resize_shape])
+        if self.resize_shape != None:
+            image = tf.image.resize(image,[*self.resize_shape])
         return image,label
     
     def load_dataset(self,filename,
@@ -170,22 +172,33 @@ class Dataset:
 
         return dataset
     
+    def get_test_dataset(self,
+                        labeled = False,
+                        ordered = True):
+        """
+            Function for reading test dataset to make submission
+            Args:
+            - labeled - if the data is labeled. 
+            - ordered - if the data is ordered.
+            Returns:
+            - Tensorflow dataset with test files.
+        """
+        dataset = self.load_dataset(self.test_files,
+                               labeled=labeled,ordered=ordered)
+        dataset = dataset.batch(self.batch_size)
+        dataset = dataset.prefetch(self.batch_size)
+        return dataset
+    
     def fetch_train_iterator(self):
         """
             Generator that output images with dimensions [batch_size,image_width,image_height,num_channels]
             and corresponding image label. Generator provides more memory efficient iterating through batches.
-            Tensorflow session must be provided to run the generator
             Returns:
             - inputs - images with format [batch_size,image_width,image_height,num_channels]
             - output - label with format [batch_size,num_labels]
         """
-        train_iterator = self.train_tfdataset.make_one_shot_iterator()
-        fetch_values = train_iterator.get_next()
-
-        with tf.Session().as_default() as sees: 
-            while True: 
-                *inputs, output = sees.run(fetch_values)
-                yield inputs,output
+        for image,label in self.train_tfdataset:
+            yield (image.numpy(),label.numpy())
         
     def fetch_valid_iterator(self):
         """
@@ -195,13 +208,8 @@ class Dataset:
             - output - label with format [batch_size,num_labels]
         """
         # Use only if you created validation dataset
-        valid_iterator = self.validation.tfdataset.make_one_shot_iterator()
-        fetch_values = valid_iterator.get_next()
-
-        with tf.Session().as_default() as sees: 
-            while True: 
-                *inputs, output = sees.run(fetch_values)
-                yield inputs,output
+        for image,label in self.validation_tfdataset:
+            yield (image.numpy(),label.numpy())
     
     def get_train_steps_per_epoch(self):
         """
