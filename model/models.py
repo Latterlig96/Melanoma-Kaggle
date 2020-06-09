@@ -81,7 +81,7 @@ class ModelCreation:
             model = Model(input_tensor,x)
             model.compile(optimizer=self.optimizer(self.learning_rate),
                           loss=self.loss,
-                          metrics=[self.metric])
+                          metrics=self.metric)
             model.summary()
             return model
         else:
@@ -94,7 +94,7 @@ class ModelCreation:
             model = Model(input_tensor,out)
             model.compile(optimizer=self.optimizer(self.learning_rate),
                           loss=self.loss,
-                          metrics=[self.metric])
+                          metrics=self.metric)
             model.summary()
             return model
 
@@ -117,7 +117,7 @@ class ModelCreation:
             model = Model(input_tensor,x)
             model.compile(optimizer=self.optimizer(self.learning_rate),
                           loss=self.loss,
-                          metrics=[self.metric])
+                          metrics=self.metric)
             model.summary()
             return model 
         else:
@@ -130,7 +130,7 @@ class ModelCreation:
             model = Model(input_tensor,out)
             model.compile(optimizer=self.optimizer(self.learning_rate),
                           loss=self.loss,
-                          metrics=[self.metric])
+                          metrics=self.metric)
             model.summary()
             return model 
     

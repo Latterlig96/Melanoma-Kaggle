@@ -6,6 +6,7 @@ class Dataset:
     def __init__(self,
                 train_files,
                 test_files,
+                validation_files,
                 validation_split,
                 image_size,
                 dataset_size,
@@ -17,7 +18,8 @@ class Dataset:
            - train_files - tfrecord file that contains training data 
            NOTE: remember to use glob to get all the files from the train directory.
            - test_files - tfrecord file that contains test data 
-           - validation_split - [0,1] - parameters that tells how much data you want have in validation dataset
+           - validation_files - tfrecord file that contains validation data
+           - validation_split - percentage of training data that is split into validation data
            - image_size - image_size in tfrecord
            - dataset_size - number of examples in trainingset
            - batch_size - height of batch_size
@@ -26,6 +28,7 @@ class Dataset:
         
         self.train_files = train_files
         self.test_files = test_files
+        self.validation_files = validation_files
         self.validation_split = validation_split 
         self.image_size = image_size
         self.dataset_size = dataset_size
@@ -106,7 +109,6 @@ class Dataset:
             - label - corresponding label to image
         """
         image = tf.image.random_flip_left_right(image)
-        image = tf.image.adjust_brightness(image,0.3)
         if self.resize_shape != None:
             image = tf.image.resize(image,[*self.resize_shape])
         return image,label
@@ -128,49 +130,38 @@ class Dataset:
             ignore_order.experimental_deterministic = False
         
         dataset = tf.data.TFRecordDataset(filename,num_parallel_reads=tf.data.experimental.AUTOTUNE)
-        dataset = dataset.shuffle(2048)
         dataset = dataset.with_options(ignore_order)
         dataset = dataset.map(self.read_labeled_tfrecord if labeled else self.read_unlabeled_tfrecord)
         
         return dataset
-    
-    def get_train_and_validation_dataset(self):
-        """
-            This function is reponsible for splitting data into train and validation sets
-            from the tfrecord.
-            Returns:
-            This function return nothing but the validation_tfdataset and train_tfdataset
-            will be initialized by this function so can be further used.
-        """
-        # Load dataset 
-        dataset = self.load_dataset(self.train_files)
-        # Creates Train and validation dataset 
-        self.validation_tfdataset = dataset.take(math.ceil(self.validation_split*self.dataset_size))
-        self.validation_tfdataset = self.validation_tfdataset.map(self.data_augment_and_resize)
-        self.validation_tfdataset = self.validation_tfdataset.repeat() 
-        self.validation_tfdataset = self.validation_tfdataset.batch(self.batch_size)
-        self.validation_tfdataset = self.validation_tfdataset.prefetch(self.batch_size)
-        # Create train dataset 
-        self.train_tfdataset = dataset.skip(math.ceil(self.validation_split*self.dataset_size))
-        self.train_tfdataset = self.train_tfdataset.map(self.data_augment_and_resize)
-        self.train_tfdataset = self.train_tfdataset.repeat()
-        self.train_tfdataset = self.train_tfdataset.batch(self.batch_size)
-        self.train_tfdataset = self.train_tfdataset.prefetch(self.batch_size)
-    
-    def get_training_dataset(self):
-        """
-            Get training set from whole training dataset
-            Returns:
-            - dataset - tensorflow dataset with images and labels
-        """
-        # Get whole training dataset
-        dataset = self.load_dataset(self.train_files)
-        dataset = dataset.map(self.data_augment_and_resize)
-        dataset = dataset.repeat() 
-        dataset = dataset.batch(self.batch_size)
-        dataset = dataset.prefetch(self.batch_size)
 
+    def get_training_dataset(self,
+                            labeled=True,
+                            ordered=False):
+        """
+            Read Training data as a TFDataset
+        """
+        dataset = self.load_dataset(self.train_files,labeled=labeled,ordered=ordered)
+        dataset = dataset.map(self.data_augment_and_resize, num_parallel_calls=tf.compat.v2.data.experimental.AUTOTUNE)
+        dataset = dataset.repeat() 
+        dataset = dataset.shuffle(2048)
+        dataset = dataset.batch(self.batch_size)
+        dataset = dataset.prefetch(tf.compat.v2.data.experimental.AUTOTUNE) 
         return dataset
+    
+    def get_validation_dataset(self,
+                                labeled=True,
+                                ordered=False):
+        """
+            Read validation data as a TFDataset
+        """
+        dataset = self.load_dataset(self.validation_files,labeled=labeled,ordered=ordered)
+        dataset = dataset.map(self.data_augment_and_resize,num_parallel_calls=tf.compat.v2.data.experimental.AUTOTUNE)
+        dataset = dataset.batch(self.batch_size)
+        dataset = dataset.cache()
+        dataset = dataset.prefetch(tf.compat.v2.data.experimental.AUTOTUNE) 
+        return dataset
+
     
     def get_test_dataset(self,
                         labeled = False,
@@ -186,7 +177,7 @@ class Dataset:
         dataset = self.load_dataset(self.test_files,
                                labeled=labeled,ordered=ordered)
         dataset = dataset.batch(self.batch_size)
-        dataset = dataset.prefetch(self.batch_size)
+        dataset = dataset.prefetch(tf.compat.v2.data.experimental.AUTOTUNE)
         return dataset
     
     def fetch_train_iterator(self):
