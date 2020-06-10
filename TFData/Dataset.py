@@ -1,6 +1,8 @@
 import tensorflow as tf 
 import math 
 import numpy as np 
+import random
+import os 
 class Dataset:
 
     def __init__(self,
@@ -35,6 +37,16 @@ class Dataset:
         self.batch_size = batch_size 
         self.resize_shape = resize_shape
 
+    
+    def seed_everything(self,seed):
+        """
+            Place a seed for the random number generator
+        """
+        random.seed(seed)
+        np.random.seed(seed)
+        os.environ['PYTHONHASHSEED'] = str(seed)
+        tf.random.set_seed(seed)
+
     def decode_image(self,
                         img):
         """
@@ -48,6 +60,30 @@ class Dataset:
         image = tf.cast(image,tf.float32) / 255.0
         image = tf.reshape(image,[*self.image_size,3])
         return image
+
+    def decode_image_from_raw_jpeg(self,
+                                    filename,
+                                    image_size,
+                                    label = None):
+        """
+            Decode image from raw jpeg filename and parse it to format comatible with tensorflow
+            Args:
+            filename - raw jpeg file path.
+            image_size - resize size as the images have different shapes
+            label - If the image has corresponding label (must be True when reading train and val images)
+            Returns: 
+            If label is set to None, function returns only image,
+            when set to True, returns image with corresponding label
+        """
+        bits = tf.io.read_file(filename)
+        image = tf.image.decode_jpeg(bits,channels=3)
+        image = tf.cast(image,tf.float32) / 255.0
+        image = tf.image.resize(image,[*image_size])
+
+        if label is None:
+            return image 
+        else:
+            return image,label
     
     def read_labeled_tfrecord(self,
                                 example):
@@ -108,11 +144,57 @@ class Dataset:
             - image - resized image
             - label - corresponding label to image
         """
-        image = tf.image.random_flip_left_right(image)
         if self.resize_shape != None:
             image = tf.image.resize(image,[*self.resize_shape])
+        else:
+            pass 
+        image = tf.image.random_flip_left_right(image)
+        image = tf.image.random_flip_up_down(image)
+        image = tf.image.random_brightness(image,0.2)
+        image = tf.image.random_contrast(image,0.2,2)
+        image = tf.image.random_saturation(image,0.2,2)
+
         return image,label
     
+    def data_augment_for_raw_jpg(self,
+                                image,
+                                label):
+        """
+            This function is responsible for augmenting training data
+            obtained from raw jpg files. These files differs from images 
+            in tfrecords as they were inappropriately created (blue channel is shifted with red channel)
+            Args:
+            - image - image from tensorflow Dataset 
+            - label - corresponding label to image
+            Returns:
+            - image - augmented image with shifted channels (from RGB to BGR)
+            - label - corresponding label to image
+        """
+        channels = tf.unstack(image,axis=-1)
+        image = tf.stack([channels[2],channels[1],channels[0]],axis=-1)
+        image = tf.image.random_flip_left_right(image)
+        image = tf.image.random_flip_up_down(image)
+        image = tf.image.random_brightness(image,0.2)
+        image = tf.image.random_contrast(image,0.2,2)
+        image = tf.image.random_saturation(image,0.2,2)
+
+        return image,label 
+
+    def data_only_resize(self,
+                    image,
+                    label):
+        """
+            Perform resizing images on validation dataset (valiation dataset should not be augmented)
+            Args:
+            - image - image from tfrecord 
+            - label - corresponding label to image
+            Returns:
+            - image - resized image 
+            - label - corresponding label to image 
+        """
+        image = tf.image.resize(image[*self.resize_shape])
+        return image,label
+
     def load_dataset(self,filename,
                           labeled=True,
                           ordered=False):
@@ -142,7 +224,7 @@ class Dataset:
             Read Training data as a TFDataset
         """
         dataset = self.load_dataset(self.train_files,labeled=labeled,ordered=ordered)
-        dataset = dataset.map(self.data_augment_and_resize, num_parallel_calls=tf.compat.v2.data.experimental.AUTOTUNE)
+        dataset = dataset.map(self.data_augment_and_resize,num_parallel_calls=tf.compat.v2.data.experimental.AUTOTUNE)
         dataset = dataset.repeat() 
         dataset = dataset.shuffle(2048)
         dataset = dataset.batch(self.batch_size)
@@ -156,7 +238,10 @@ class Dataset:
             Read validation data as a TFDataset
         """
         dataset = self.load_dataset(self.validation_files,labeled=labeled,ordered=ordered)
-        dataset = dataset.map(self.data_augment_and_resize,num_parallel_calls=tf.compat.v2.data.experimental.AUTOTUNE)
+        if self.resize_shape != None:
+            dataset = dataset.map(self.data_only_resize,num_parallel_calls=tf.compat.v2.data.experimental.AUTOTUNE)
+        else:
+            pass 
         dataset = dataset.batch(self.batch_size)
         dataset = dataset.cache()
         dataset = dataset.prefetch(tf.compat.v2.data.experimental.AUTOTUNE) 
