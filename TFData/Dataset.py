@@ -13,6 +13,7 @@ class Dataset:
                 image_size,
                 dataset_size,
                 batch_size,
+                shuffle,
                 resize_shape = None):
         
         """
@@ -25,6 +26,7 @@ class Dataset:
            - image_size - image_size in tfrecord
            - dataset_size - number of examples in trainingset
            - batch_size - height of batch_size
+           - shuffle - int describint amount of data to be shuffled
            - resize_shape - shape to which you want to resize your images - tuple [width,height]
         """
         
@@ -226,7 +228,7 @@ class Dataset:
         dataset = self.load_dataset(self.train_files,labeled=labeled,ordered=ordered)
         dataset = dataset.map(self.data_augment_and_resize,num_parallel_calls=tf.compat.v2.data.experimental.AUTOTUNE)
         dataset = dataset.repeat() 
-        dataset = dataset.shuffle(2048)
+        dataset = dataset.shuffle(self.shuffle)
         dataset = dataset.batch(self.batch_size)
         dataset = dataset.prefetch(tf.compat.v2.data.experimental.AUTOTUNE) 
         return dataset
@@ -298,3 +300,23 @@ class Dataset:
             Defines validation step in each epoch
         """
         return math.ceil(math.ceil(self.dataset_size*self.validation_split)/self.batch_size)
+    
+    def get_train_from_tensor_slices(self):
+        """
+            Create TFDataset from training data (mostly convenient when making CV,
+            as we can read raw data from folds and create TFDataset object).
+        """
+        return tf.data.Dataset.from_tensor_slices(
+            (self.train_files[0],self.train_files[1])
+        ).map(self.decode_image_from_raw_jpeg,num_parallel_calls=tf.compat.v2.experimental.AUTOTUNE
+        ).map(self.data_augment_for_raw_jpg,num_parallel_calls=tf.compat.v2.experimental.AUTOTUNE
+        ).repeat().shuffle(self.shuffle).batch(self.batch_size).prefetch(tf.compat.v2.experimental.AUTOTUNE)
+    
+    def get_val_from_tensor_slices(self):
+        """
+            Create TFDataset from validation data
+        """
+        return tf.data.Dataset.from_tensor_slices(
+            (self.validation_files[0],self.validation_files[1])
+        ).map(self.decode_image_from_raw_jpeg,num_parallel_calls=tf.compat.v2.experimental.AUTOTUNE
+        ).batch(self.batch_size).cache().prefetch(tf.compat.v2.experimental.AUTOTUNE)

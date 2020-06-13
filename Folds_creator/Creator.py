@@ -3,6 +3,9 @@ import pandas as pd
 import numpy as np
 from sklearn.model_selection import GroupKFold,StratifiedKFold,KFold
 import os 
+import random 
+from collections import Counter,defaultdict 
+
 
 
 class Fold_Creator:
@@ -30,8 +33,9 @@ class Fold_Creator:
                 - GroupKFold
                 - KFold
                 - TFDataset - Perform KFold on set of TFRecordDataset paths,
-                we dont need other types of folds creation since we dont really know what's in these files
-                (if we did not create them).
+                    we dont need other types of folds creation since we dont really know what's in these files
+                    (if we did not create them).
+                - StratifiedGroupKFold
             - n_splits - number of folds to be created
             - shuffle - whether to shuffle the data before folding
             - random_state - random number generator
@@ -72,6 +76,57 @@ class Fold_Creator:
         valid_paths_fold = valid_fold.image_name.apply(self.format_path_valid).values
         valid_labels_fold = valid_fold.target.values
         return train_paths_fold,train_labels_fold,valid_paths_fold,valid_labels_fold
+    
+
+    def stratified_group_k_fold(self,n_splits):
+        """
+            Implementation of Stratified GroupKFold Cross Validation 
+            made by Jakub Wąsikowski that can be found under this link: 
+            https://www.kaggle.com/jakubwasikowski/stratified-group-k-fold-cross-validation
+        """
+        labels_num = np.max(self.train_df.target.values) + 1
+        y_counts_per_group = defaultdict(lambda: np.zeros(labels_num))
+        y_distr = Counter()
+        for label, g in zip(self.train_df.target.values,self.train_df[self.group_col].values):
+            y_counts_per_group[g][label] += 1
+            y_distr[label] += 1
+
+        y_counts_per_fold = defaultdict(lambda: np.zeros(labels_num))
+        groups_per_fold = defaultdict(set)
+
+        def eval_y_counts_per_fold(y_counts, fold):
+            y_counts_per_fold[fold] += y_counts
+            std_per_label = []
+            for label in range(labels_num):
+                label_std = np.std([y_counts_per_fold[i][label] / y_distr[label] for i in range(n_splits)])
+                std_per_label.append(label_std)
+            y_counts_per_fold[fold] -= y_counts
+            return np.mean(std_per_label)
+    
+        groups_and_y_counts = list(y_counts_per_group.items())
+        random.Random(self.random_state).shuffle(groups_and_y_counts)
+
+        for g, y_counts in sorted(groups_and_y_counts, key=lambda x: -np.std(x[1])):
+            best_fold = None
+            min_eval = None
+            for i in range(n_splits):
+                fold_eval = eval_y_counts_per_fold(y_counts, i)
+                if min_eval is None or fold_eval < min_eval:
+                    min_eval = fold_eval
+                    best_fold = i
+            y_counts_per_fold[best_fold] += y_counts
+            groups_per_fold[best_fold].add(g)
+
+        all_groups = set(self.train_df[self.group_col])
+        for i in range(n_splits):
+            train_groups = all_groups - groups_per_fold[i]
+            test_groups = groups_per_fold[i]
+
+            train_indices = [i for i, g in enumerate(self.train_df[self.group_col]) if g in train_groups]
+            test_indices = [i for i, g in enumerate(self.train_df[self.group_col]) if g in test_groups]
+
+            yield train_indices, test_indices
+
 
     def create_folds_generator(self):
         result = [] 
@@ -89,10 +144,16 @@ class Fold_Creator:
                 train_fold = self.train_df.iloc[trn_idx]
                 val_fold = self.train_df.iloc[val_idx]
                 result.append((train_fold,val_fold))
-        else: 
+        elif self.fold_type == 'GroupKFold': 
             gkf = GroupKFold(n_splits=self.n_splits)
             for trn_idx,val_idx in gkf.split(self.train_df,self.train_df.target.values,
                                             groups=np.array(self.train_df[self.group_col].values) if self.group_col != None else None):
+                train_fold = self.train_df.iloc[trn_idx]
+                val_fold = self.train_df.iloc[val_idx]
+                result.append((train_fold,val_fold))
+        else:
+            sgkf = self.stratified_group_k_fold(self.n_splits)
+            for trn_idx,val_idx in sgkf:
                 train_fold = self.train_df.iloc[trn_idx]
                 val_fold = self.train_df.iloc[val_idx]
                 result.append((train_fold,val_fold))
