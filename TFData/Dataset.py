@@ -37,6 +37,7 @@ class Dataset:
         self.validation_split = validation_split 
         self.image_size = image_size
         self.dataset_size = dataset_size
+        self.shuffle = shuffle
         self.batch_size = batch_size 
         self.resize_shape = resize_shape
 
@@ -191,7 +192,7 @@ class Dataset:
             - image - resized image 
             - label - corresponding label to image 
         """
-        image = tf.image.resize(image[*self.resize_shape])
+        image = tf.image.resize(image,[*self.resize_shape])
         return image,label
 
     def load_dataset(self,filename,
@@ -306,9 +307,9 @@ class Dataset:
         """
         return tf.data.Dataset.from_tensor_slices(
             (self.train_files[0],self.train_files[1])
-        ).map(self.decode_image_from_raw_jpeg,num_parallel_calls=tf.compat.v2.experimental.AUTOTUNE
-        ).map(self.data_augment_for_raw_jpg,num_parallel_calls=tf.compat.v2.experimental.AUTOTUNE
-        ).repeat().shuffle(self.shuffle).batch(self.batch_size).prefetch(tf.compat.v2.experimental.AUTOTUNE)
+        ).map(self.decode_image_from_raw_jpeg,num_parallel_calls=tf.compat.v2.data.experimental.AUTOTUNE
+        ).map(self.data_augment_for_raw_jpg,num_parallel_calls=tf.compat.v2.data.experimental.AUTOTUNE
+        ).repeat().shuffle(self.shuffle).batch(self.batch_size).prefetch(tf.compat.v2.data.experimental.AUTOTUNE)
     
     def get_val_from_tensor_slices(self):
         """
@@ -316,5 +317,5 @@ class Dataset:
         """
         return tf.data.Dataset.from_tensor_slices(
             (self.validation_files[0],self.validation_files[1])
-        ).map(self.decode_image_from_raw_jpeg,num_parallel_calls=tf.compat.v2.experimental.AUTOTUNE
-        ).batch(self.batch_size).cache().prefetch(tf.compat.v2.experimental.AUTOTUNE)
+        ).map(self.decode_image_from_raw_jpeg,num_parallel_calls=tf.compat.v2.data.experimental.AUTOTUNE
+        ).batch(self.batch_size).cache().prefetch(tf.compat.v2.data.experimental.AUTOTUNE)

@@ -65,10 +65,10 @@ class Fold_Creator:
         self.test_df = pd.read_csv(self.test_df_path)
     
     def format_path_train(self,img_name):
-        return os.getcwd() + "\Dataset\JPEG\train\\" + img_name + '.jpg'
+        return './Dataset/JPEG/train/' + img_name + '.jpg'
     
     def format_path_valid(self,img_name):
-        return os.getcwd() + "\Dataset\JPEG\train\\" + img_name + '.jpg'
+        return './Dataset/JPEG/train/' + img_name + '.jpg'
 
     def post_process(self,train_fold,valid_fold):
         train_paths_fold = train_fold.image_name.apply(self.format_path_train).values
@@ -129,13 +129,14 @@ class Fold_Creator:
 
 
     def create_folds_generator(self):
-        result = [] 
+        
         if self.fold_type == 'KFold':
             kf = KFold(n_splits=self.n_splits,shuffle=self.shuffle,random_state=self.random_state)
             for trn_idx,val_idx in kf.split(self.train_df,self.train_df.target.values):
                 train_fold = self.train_df.iloc[trn_idx]
                 val_fold = self.train_df.iloc[val_idx]
-                result.append((train_fold,val_fold))
+                train_path,train_label,valid_path,valid_label = self.post_process(train_fold,val_fold)
+                yield trn_idx,val_idx,train_path,train_label,valid_path,valid_label
 
         elif self.fold_type == 'StratifiedKFold':
             skf = StratifiedKFold(n_splits=self.n_splits,shuffle=self.shuffle,random_state=self.random_state)
@@ -143,25 +144,26 @@ class Fold_Creator:
                                             groups=np.array(self.train_df[self.group_col].values) if self.group_col != None else None):
                 train_fold = self.train_df.iloc[trn_idx]
                 val_fold = self.train_df.iloc[val_idx]
-                result.append((train_fold,val_fold))
+                train_path,train_label,valid_path,valid_label = self.post_process(train_fold,val_fold)
+                yield trn_idx,val_idx,train_path,train_label,valid_path,valid_label
+
         elif self.fold_type == 'GroupKFold': 
             gkf = GroupKFold(n_splits=self.n_splits)
             for trn_idx,val_idx in gkf.split(self.train_df,self.train_df.target.values,
                                             groups=np.array(self.train_df[self.group_col].values) if self.group_col != None else None):
                 train_fold = self.train_df.iloc[trn_idx]
                 val_fold = self.train_df.iloc[val_idx]
-                result.append((train_fold,val_fold))
+                train_path,train_label,valid_path,valid_label = self.post_process(train_fold,val_fold)
+                yield trn_idx,val_idx,train_path,train_label,valid_path,valid_label
+
         else:
             sgkf = self.stratified_group_k_fold(self.n_splits)
             for trn_idx,val_idx in sgkf:
                 train_fold = self.train_df.iloc[trn_idx]
                 val_fold = self.train_df.iloc[val_idx]
-                result.append((train_fold,val_fold))
-        
-        for train_fold,valid_fold in result:
-            train_path,train_label,valid_path,valid_label = self.post_process(train_fold,valid_fold)
-            yield train_path,train_label,valid_path,valid_label
-    
+                train_path,train_label,valid_path,valid_label = self.post_process(train_fold,val_fold)
+                yield trn_idx,val_idx,train_path,train_label,valid_path,valid_label
+
     def create_tfrecord_fold_generator(self):
         kf = KFold(n_splits=self.n_splits,shuffle=self.shuffle,random_state=self.random_state)
         for trn_idx,val_idx in kf.split(self.tfrecord_path):
