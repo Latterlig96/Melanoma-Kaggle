@@ -1,4 +1,5 @@
 import tensorflow as tf 
+import tensorflow_addons as tfa
 import math 
 import numpy as np 
 import random
@@ -65,14 +66,12 @@ class Dataset:
 
     def decode_image_from_raw_jpeg(self,
                                     filename,
-                                    image_size,
-                                    label = None):
+                                    label):
         """
             Decode image from raw jpeg filename and parse it to format comatible with tensorflow
             Args:
             filename - raw jpeg file path.
-            image_size - resize size as the images have different shapes
-            label - If the image has corresponding label (must be True when reading train and val images)
+            label - If the image has corresponding label.
             Returns: 
             If label is set to None, function returns only image,
             when set to True, returns image with corresponding label
@@ -80,12 +79,9 @@ class Dataset:
         bits = tf.io.read_file(filename)
         image = tf.image.decode_jpeg(bits,channels=3)
         image = tf.cast(image,tf.float32) / 255.0
-        image = tf.image.resize(image,[*image_size])
+        image = tf.image.resize(image,[*self.resize_shape])
 
-        if label is None:
-            return image 
-        else:
-            return image,label
+        return image,label
     
     def read_labeled_tfrecord(self,
                                 example):
@@ -152,9 +148,10 @@ class Dataset:
             pass 
         image = tf.image.random_flip_left_right(image)
         image = tf.image.random_flip_up_down(image)
-        image = tf.image.random_brightness(image,0.2)
-        image = tf.image.random_contrast(image,0.2,2)
-        image = tf.image.random_saturation(image,0.2,2)
+        image = tf.image.random_brightness(image,0.5)
+        image = tf.image.random_contrast(image,0.2,3)
+        image = tf.image.random_saturation(image,0.2,3)
+        image = tfa.image.mean_filter2d(image)
 
         return image,label
     
@@ -172,13 +169,13 @@ class Dataset:
             - image - augmented image with shifted channels (from RGB to BGR)
             - label - corresponding label to image
         """
-        channels = tf.unstack(image,axis=-1)
-        image = tf.stack([channels[2],channels[1],channels[0]],axis=-1)
+        
         image = tf.image.random_flip_left_right(image)
         image = tf.image.random_flip_up_down(image)
-        image = tf.image.random_brightness(image,0.2)
-        image = tf.image.random_contrast(image,0.2,2)
-        image = tf.image.random_saturation(image,0.2,2)
+        image = tf.image.random_brightness(image,0.5)
+        image = tf.image.random_contrast(image,0.2,3)
+        image = tf.image.random_saturation(image,0.2,3)
+        image = tfa.image.mean_filter2d(image)
 
         return image,label 
 
@@ -263,6 +260,7 @@ class Dataset:
         """
         dataset = self.load_dataset(self.test_files,
                                labeled=labeled,ordered=ordered)
+        dataset = dataset.map(self.data_only_resize,num_parallel_calls=tf.compat.v2.data.experimental.AUTOTUNE)
         dataset = dataset.batch(self.batch_size)
         dataset = dataset.prefetch(tf.compat.v2.data.experimental.AUTOTUNE)
         return dataset
