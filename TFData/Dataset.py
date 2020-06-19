@@ -1,5 +1,5 @@
 import tensorflow as tf 
-import tensorflow_addons as tfa
+import tensorflow_addons as tfa 
 import math 
 import numpy as np 
 import random
@@ -177,7 +177,7 @@ class Dataset:
         image = tf.image.random_contrast(image,0.2,3)
         image = tf.image.random_saturation(image,0.2,3)
         image = tfa.image.mean_filter2d(image)
-
+        
         return image,label 
 
     def data_only_resize(self,
