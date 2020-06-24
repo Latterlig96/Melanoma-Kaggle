@@ -173,9 +173,9 @@ class Dataset:
         
         image = tf.image.random_flip_left_right(image)
         image = tf.image.random_flip_up_down(image)
-        image = tf.image.random_brightness(image,0.5)
-        image = tf.image.random_contrast(image,0.2,3)
-        image = tf.image.random_saturation(image,0.2,3)
+        image = tf.image.random_brightness(image,0.1)
+        image = tf.image.random_contrast(image,0.2,2)
+        image = tf.image.random_saturation(image,0.2,2)
         image = tfa.image.mean_filter2d(image)
         
         return image,label 
