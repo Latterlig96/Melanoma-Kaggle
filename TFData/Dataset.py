@@ -401,8 +401,40 @@ class Dataset_TTA(Dataset):
                                   filenames = test_ids,
                                   target = final_predictions,
                                   filename='submission.csv')
+                                  
         return final_predictions
     
+
+    def submit_score_without_tta(self,
+                                models,
+                                write_to_submission):
+        """
+            Submit model predictions without TTA
+            Args: 
+            models - models path (given as a regex pattern)
+            write_to_submission - boolean - whether to write to submission
+            Returns: 
+        """
+        predictions = [] 
+        for model in models:
+            loaded_model = load_model(model)
+            dataset = self.get_test_dataset(tta_augmentation=False)
+            images = dataset.map(lambda image,idnum: image)
+            probabilities = np.concatenate(loaded_model.predict(images))
+            predictions.append(probabilities)
+        
+        final_predictions = np.stack(predictions,0).mean(0)
+
+        if write_to_submission:
+            test_ids_ds = self.get_test_dataset(tta_augmentation=False).map(lambda image,idnum: idnum).unbatch()
+            test_ids = next(iter(test_ids_ds.batch(self.dataset_size))).numpy().astype('U')
+            self.output_submission(submission_path='./Dataset/sample_submission.csv',
+                                   filenames = test_ids,
+                                   target = final_predictions,
+                                   filename = 'submission.csv')
+        
+        return final_predictions
+
     def output_submission(self,
                         submission_path,
                         filenames,
