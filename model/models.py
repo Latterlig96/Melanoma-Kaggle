@@ -72,7 +72,7 @@ class ModelCreation:
             - Model - Keras model that is ready to be fit.
         """
         input_tensor = Input(shape=self.input_shape)
-        base_model = efn.EfficientNetB5(include_top=False,input_tensor=input_tensor)
+        base_model = efn.EfficientNetB3(include_top=False,input_tensor=input_tensor)
         x = base_model(input_tensor)
         if linear:
             x = GlobalAveragePooling2D()(x)

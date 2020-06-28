@@ -1,20 +1,22 @@
 import tensorflow as tf 
 import tensorflow_addons as tfa 
+from tensorflow.keras.models import load_model
 import math 
-import numpy as np 
+import numpy as np
+import pandas as pd  
 import random
 import os 
 class Dataset:
 
     def __init__(self,
-                train_files,
-                test_files,
-                validation_files,
-                validation_split,
-                image_size,
-                dataset_size,
-                batch_size,
-                shuffle,
+                train_files = None,
+                test_files = None,
+                validation_files = None,
+                validation_split = None,
+                image_size = None,
+                dataset_size = None,
+                batch_size = None,
+                shuffle = None,
                 resize_shape = None):
         
         """
@@ -322,3 +324,103 @@ class Dataset:
         dataset = dataset.prefetch(tf.compat.v2.data.experimental.AUTOTUNE)
 
         return dataset
+
+class Dataset_TTA(Dataset):
+
+    def __init__(self,
+                test_files,
+                dataset_size = 10982,
+                image_size = [1024,1024],
+                resize_shape = [256,256],
+                batch_size = 8):
+        super(Dataset_TTA,self).__init__(test_files=test_files,
+                                        dataset_size = dataset_size,
+                                        image_size=image_size,
+                                        resize_shape=resize_shape,
+                                        batch_size=batch_size)
+        
+        self.dataset_size = dataset_size
+
+    def tta_augmentation(self,image,idnum):
+        """
+            Function reponsible for set of operations that are randomly done during TTA process
+        """
+        image = tf.image.random_flip_left_right(image)
+        image = tf.image.random_flip_up_down(image)
+        image = tf.image.random_contrast(image,0.1,0.3)
+
+        return image,idnum
+
+    def get_test_dataset(self,tta_augmentation = True):
+        """
+            Function calls a function from upper class to load test dataset
+            with additional TTA augmentation 
+            Args:
+            tta_augmentation - whether to apply tta augmentation
+            Returns: 
+            dataset - TFDataset
+        """
+        if tta_augmentation:
+            dataset = super().get_test_dataset().map(self.tta_augmentation,num_parallel_calls=tf.compat.v2.data.experimental.AUTOTUNE)
+            return dataset
+        else: 
+            return super().get_test_dataset()
+    
+    def apply_tta(self,
+                 models,
+                 write_to_submission,
+                 tta_steps=3):
+        """
+            Performing TTA (Test Time Augmentation) 
+            Args: 
+            models - list - list containing path to models (preferably given in a glob)
+            tta_steps - int - number of steps in which tta will be performed (at the end average of
+            predictions is computed)
+            Returns: 
+            final_predictions - averaged predictions made by each model given in models argument
+            and their predictions in tta steps.
+        """
+        predictions = [] 
+        for model in models:
+            print(f"Loading model: {model}")
+            loaded_model = load_model(model)
+            stacked_predictions = []
+            for i in range(tta_steps):
+                dataset = self.get_test_dataset()
+                images = dataset.map(lambda image,idnum: image)
+                probabilities = np.concatenate(loaded_model.predict(images))
+                stacked_predictions.append(probabilities)
+            preds = np.stack(stacked_predictions,0).mean(0)
+            predictions.append(preds)
+        final_predictions = np.stack(predictions,0).mean(0)
+
+        if write_to_submission:
+            test_ids_ds = self.get_test_dataset().map(lambda image,idnum:idnum).unbatch()
+            test_ids = next(iter(test_ids_ds.batch(self.dataset_size))).numpy().astype('U')
+            self.output_submission(submission_path='./Dataset/sample_submission.csv',
+                                  filenames = test_ids,
+                                  target = final_predictions,
+                                  filename='submission.csv')
+        return final_predictions
+    
+    def output_submission(self,
+                        submission_path,
+                        filenames,
+                        target,
+                        filename):
+        """
+            Function responsible for writing output submission ready to send.
+            Args: 
+            submission_path - path where the submission file lays (with csv extension)
+            filenames - name of test filenames (just to reject any unwanted random occurences)
+            target - target values predicted by models 
+            filename - name of the final filename (with csv extension)
+            Returns:
+            None
+        """
+        submission = pd.read_csv(submission_path)
+        pred_df = pd.DataFrame({'image_name':filenames,'target':target})
+        submission.drop('target',inplace=True,axis=1)
+        submission = submission.merge(pred_df,on='image_name')
+        submission.to_csv(filename,index=False)
+        return
