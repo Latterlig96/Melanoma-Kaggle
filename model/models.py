@@ -1,11 +1,12 @@
 import numpy as np 
 from tensorflow.keras.layers import GlobalAveragePooling2D
-from tensorflow.keras.layers import Concatenate,GlobalMaxPooling2D
+from tensorflow.keras.layers import Concatenate
 from tensorflow.keras.layers import Dense,Dropout,Flatten,Input
 from tensorflow.keras.models import Model
 from tensorflow.keras.callbacks import Callback
 from tensorflow.keras.applications.nasnet import NASNetMobile,preprocess_input
 from tensorflow.keras.mixed_precision import experimental as mixed_precision
+from tensorflow_addons.layers import AdaptiveAveragePooling2D,AdaptiveMaxPooling2D
 import os 
 import efficientnet.tfkeras as efn
 
@@ -49,7 +50,7 @@ class ModelCreation:
                 self.linear = linear 
                 self.verbose = verbose
     
-                self.set_mixed_precision()
+                #self.set_mixed_precision()
 
                 if self.architecture == 'efficientnet':
                     self.model = self.create_model_efficientnet(self.linear)
@@ -85,11 +86,18 @@ class ModelCreation:
             model.summary()
             return model
         else:
-            out1 = GlobalAveragePooling2D()(x)
-            out2 = GlobalMaxPooling2D()(x)
-            out3 = Flatten()(x)
-            out = Concatenate(axis=-1)([out1,out2,out3])
-            out = Dropout(0.5)(out)
+            out1 = AdaptiveMaxPooling2D((2,2))(x)
+            out2 = AdaptiveAveragePooling2D((2,2))(x)
+            out = Concatenate(axis=-1)([out1,out2])
+            out = Flatten()(out)
+            out = Dense(2048,activation='relu')(out)
+            out = Dropout(0.4)(out)
+            out = Dense(1024,activation='relu')(out)
+            out = Dropout(0.3)(out)
+            out = Dense(512,activation='relu')(out)
+            out = Dropout(0.2)(out)
+            out = Dense(256,activation='relu')(out)
+            out = Dropout(0.1)(out)
             out = Dense(self.output_shape,activation='sigmoid')(out)
             model = Model(input_tensor,out)
             model.compile(optimizer=self.optimizer(self.learning_rate),
@@ -121,11 +129,18 @@ class ModelCreation:
             model.summary()
             return model 
         else:
-            out1 = GlobalAveragePooling2D()(x)
-            out2 = GlobalMaxPooling2D()(x)
-            out3 = Flatten()(x)
-            out = Concatenate(axis=-1)([out1,out2,out3])
-            out = Dropout(0.5)(out)
+            out1 = AdaptiveMaxPooling2D((2,2))(x)
+            out2 = AdaptiveAveragePooling2D((2,2))(x)
+            out = Concatenate(axis=-1)([out1,out2])
+            out = Flatten()(out)
+            out = Dense(2048,activation='relu')(out)
+            out = Dropout(0.4)(out)
+            out = Dense(1024,activation='relu')(out)
+            out = Dropout(0.3)(out)
+            out = Dense(512,activation='relu')(out)
+            out = Dropout(0.2)(out)
+            out = Dense(256,activation='relu')(out)
+            out = Dropout(0.1)(out)
             out = Dense(self.output_shape,activation='sigmoid')(out)
             model = Model(input_tensor,out)
             model.compile(optimizer=self.optimizer(self.learning_rate),

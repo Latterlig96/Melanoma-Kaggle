@@ -87,47 +87,190 @@ class Dataset:
         return image,label
     
     def read_labeled_tfrecord(self,
-                                example):
+                                example,
+                                with_meta = True,
+                                ):
         """
            In this function you read images nad labels from tfrecord in their
            default data type and parse them to a format where they can be 
            fed into model.
            Args:
            - example - tfrecord label contains image and corresponding label
+           - with_meta - bool - whether to read the metadata features
            Returns:
            - Image - image casted as a tf.float32 tensor object with size [1024,1024,3]
            - label - image corresponding label in tf.int32 format 
         """
-        feature = {
+        if with_meta:
+            feature = {
+                "image": tf.io.FixedLenFeature([],tf.string),
+                "sex": tf.io.FixedLenFeature([], tf.int64),
+                "age_approx": tf.io.FixedLenFeature([],tf.int64),
+                "anatom_site_general_challenge": tf.io.FixedLenFeature([],tf.int64),
+                "diagnosis": tf.io.FixedLenFeature([],tf.int64),
+                "target": tf.io.FixedLenFeature([],tf.int64)
+                }
+        else: 
+            feature = {
             "image": tf.io.FixedLenFeature([],tf.string),
             "target": tf.io.FixedLenFeature([],tf.int64)
                     }
         example = tf.io.parse_single_example(example,feature)
+
+        if with_meta:
+            data = {} 
+            data['sex'] = tf.cast(example['sex'],tf.int32)
+            data['age_approx'] = tf.cast(example['age_approx'],tf.int32)
+            data['anatom_site_general_challenge'] = tf.cast(example['anatom_site_general_challenge'],tf.int32)
+            data['diagnosis'] = tf.cast(example['diagnosis'],tf.int32)
         image = self.decode_image(example['image'])
         label = tf.cast(example['target'],tf.int32)
 
-        return image,label
+        if with_meta:
+            return image,label,data
+        else:
+            return image,label
+
     
     def read_unlabeled_tfrecord(self,
-                                example):
+                                example,
+                                with_meta = True):
         """
             This function is similiar to a read_labeled_tfrecord function 
             but here instead of having label we have image_name.
             Args:
             - example - tfrecord label contains image and coressponding label
+            - with_meta - whether to read metadata features
             Returns:
             - Image - image casted as a tf.float32 tensor object with size [1024,1024,3]
             - idnum - image name corresponding to parsed image
         """
-        feature = {
+        if with_meta:
+            feature = {
+                "image": tf.io.FixedLenFeature([],tf.string),
+                "image_name": tf.io.FixedLenFeature([],tf.string),
+                "sex": tf.io.FixedLenFeature([],tf.int64),
+                "age_approx": tf.io.FixedLenFeature([],tf.int64),
+                "anatom_site_general_challenge": tf.io.FixedLenFeature([],tf.int64),    
+                    }
+        else:
+            feature = {
             "image": tf.io.FixedLenFeature([],tf.string),
-            "image_name": tf.io.FixedLenFeature([],tf.string)
+            "image_name": tf.io.FixedLenFeature([],tf.string),    
                 }
         example = tf.io.parse_single_example(example,feature)
+
+        if with_meta:
+            data = {} 
+            data['sex'] = tf.cast(example['sex'],tf.int32)
+            data['age_approx'] = tf.cast(example['age_approx'],tf.int32)
+            data['anatom_site_general_challenge'] = tf.cast(example['anatom_site_general_challenge'],tf.int32)
         image = self.decode_image(example['image'])
         idnum = example['image_name']
 
-        return image,idnum
+        if with_meta: 
+            return image,idnum,data
+        else: 
+            return image,idnum
+    
+    def read_full_tfrecord(self,
+                            example):
+        """
+            Read full tfcored from given examples, this function is similar to 
+            read_labeled_tfcored but given that we must provide object when reading 
+            mapping functions it is not possible to sneak around and try to load 
+            f.e image_name because it will raise an error, so we must provide different function.
+        """
+
+        feature = {
+        "image": tf.io.FixedLenFeature([], tf.string), 
+        "image_name": tf.io.FixedLenFeature([], tf.string), 
+        "target": tf.io.FixedLenFeature([], tf.int64), 
+        "diagnosis": tf.io.FixedLenFeature([],tf.int64),
+        "age_approx": tf.io.FixedLenFeature([], tf.int64),
+        "sex": tf.io.FixedLenFeature([], tf.int64),
+        "anatom_site_general_challenge": tf.io.FixedLenFeature([], tf.int64)
+                }
+
+        example = tf.io.parse_single_example(example, feature)
+        image = decode_image(example['image'])
+        image_name = example['image_name']
+        label = tf.cast(example['target'], tf.float32)
+        data = {}
+        data['age_approx'] = tf.cast(example['age_approx'], tf.int32)
+        data['diagnosis'] = tf.cast(example['diagnosis'], tf.int32)
+        data['sex'] = tf.cast(example['sex'], tf.int32)
+        data['anatom_site_general_challenge'] = tf.cast(tf.one_hot(example['anatom_site_general_challenge'], 7), tf.int32)
+
+        return image, image_name, label, data
+    
+    def train_data_setup(self,
+                        image,
+                        label,
+                        data):
+        """
+            Setup training data to float32 (which is deafult datatype when training)
+            Args: 
+            - image - image to train 
+            - label - coressponding label to image 
+            - data - metadata features
+            Returns: 
+            Dict - dictionary of different inputs which can be fed into model 
+            label - corresponding label to Dict data
+        """
+        anatom = [tf.cast(data['anatom_site_general_challenge'],tf.float32)]
+        diagnosis = [tf.cast(data['diagnosis'],tf.float32)]
+
+        tab_data = [tf.cast(data[feat],tf.float32) for feat in ['age_approx','sex']]
+
+        tabular = tf.stack(tab_data + anatom + diagnosis)
+
+        return {'inp1': image, 'inp2': tabular}, label
+    
+    def test_data_setup(self,
+                        image,
+                        idnum,
+                        data):
+        """
+            Setup test data to float32 
+            Args: 
+            - image - image to train 
+            - idnum - corresponding image name 
+            - data - metadata features
+            Returns: 
+            Dict - dictionary of different inputs which can be fed into model 
+            idnum - coressponding image name to data 
+        """
+        anatom = [tf.cast(data['anatom_site_general_challenge'],tf.float32)]
+
+        tab_data = [tf.cast(data[feat],tf.float32) for feat in ['age_approx','sex']]
+
+        tabular = tf.stack(tab_data + anatom)
+
+        return {'inp1': image,'inp2': tabular}, idnum
+    
+    def full_data_setup(self,
+                        image,
+                        image_name,
+                        label,
+                        data):
+        """
+            Setup full data to float32 
+            Args: 
+            - image - image to train 
+            - image_name - image name of given example 
+            - label - corresponding label to image
+            - data - metadata features
+        """
+        anatom = [tf.cast(data['anatom_site_general_challenge'],tf.float32)]
+        diagnosis = [tf.cast(data['diagnosis'],tf.float32)]
+
+        tab_data = [tf.cast(data[feat],tf.float32) for feat in ['age_approx','sex']]
+
+        tabular = tf.stack(tab_data + anatom + diagnosis)
+
+        return {'inp1': image, 'inp2': tabular}, image_name, label
+
 
     def data_augment_and_resize(self,
                     image,
@@ -180,6 +323,33 @@ class Dataset:
         
         return image,label 
 
+    def data_augment_and_resize_with_meta(self,
+                                          data,
+                                          label):
+        """
+            Similiar function to data_augment_and_resize
+            but here we operate mostly on dict that consist of 
+            image and metadata features.
+            Args: 
+            - data - dict consist of images given with key inp1 
+            and metadata features with key inp2
+            - label - label corresponding to given example
+            Returns: 
+            - data - dict with augmented images (no hierarchy is interrupted)
+            - label - corresponding label to given example
+        """
+        if self.resize_shape != None:
+            data['inp1'] = tf.image.resize(data['inp1'],[*self.resize_shape])
+        else:
+            pass 
+        data['inp1'] = tf.image.random_flip_left_right(data['inp1'])
+        data['inp1'] = tf.image.random_flip_up_down(data['inp1'])
+        data['inp1'] = tf.image.random_brightness(data['inp1'],0.1)
+        data['inp1'] = tf.image.random_contrast(data['inp1'],0.2,3)
+        data['inp1'] = tf.image.random_saturation(data['inp1'],0.2,3)
+
+        return data,label
+
     def data_only_resize(self,
                     image,
                     label):
@@ -194,6 +364,15 @@ class Dataset:
         """
         image = tf.image.resize(image,[*self.resize_shape])
         return image,label
+    
+    def data_only_resize_with_meta(self,
+                                   data,
+                                   label):
+        """
+            Similar function to data_only_resize but works on dict with images and metadata
+        """
+        data['inp1'] = tf.image.resize(data['inp1'],[*self.resize_shape])
+        return data,label 
 
     def load_dataset(self,filename,
                           labeled=True,
@@ -216,15 +395,33 @@ class Dataset:
         dataset = dataset.map(self.read_labeled_tfrecord if labeled else self.read_unlabeled_tfrecord)
         
         return dataset
+    
+    def load_full_dataset(self,filenames):
+        """
+            Read full dataset, especially necessary when dealing with Folds stored 
+            as tfrecords, because the data will be shuffled so image names will be 
+            randomly selected and we have to find them by their image names 
+            (not just index as it can be done with normal f.e. KFold)
+        """
+
+        dataset = tf.data.TFRecordDataset(filenames,num_parallel_reads=tf.data.experimental.AUTOTUNE)
+        dataset = dataset.map(self.read_full_tfrecord,num_parallel_calls=tf.compat.v2.data.experimental.AUTOTUNE)
+
+        return dataset
 
     def get_training_dataset(self,
                             labeled=True,
-                            ordered=False):
+                            ordered=False,
+                            with_meta=True):
         """
             Read Training data as a TFDataset
         """
         dataset = self.load_dataset(self.train_files,labeled=labeled,ordered=ordered)
-        dataset = dataset.map(self.data_augment_and_resize,num_parallel_calls=tf.compat.v2.data.experimental.AUTOTUNE)
+        if with_meta: 
+            dataset = dataset.map(self.train_data_setup,num_parallel_calls=tf.compat.v2.data.experimental.AUTOTUNE)
+            dataset = dataset.map(self.data_augment_and_resize_with_meta,num_parallel_calls=tf.compat.v2.data.experimental.AUTOTUNE)
+        else:
+            dataset = dataset.map(self.data_augment_and_resize,num_parallel_calls=tf.compat.v2.data.experimental.AUTOTUNE)
         dataset = dataset.repeat() 
         dataset = dataset.shuffle(self.shuffle)
         dataset = dataset.batch(self.batch_size)
@@ -234,13 +431,18 @@ class Dataset:
     
     def get_validation_dataset(self,
                                 labeled=True,
-                                ordered=False):
+                                ordered=False,
+                                with_meta = True):
         """
             Read validation data as a TFDataset
         """
         dataset = self.load_dataset(self.validation_files,labeled=labeled,ordered=ordered)
         if self.resize_shape != None:
-            dataset = dataset.map(self.data_only_resize,num_parallel_calls=tf.compat.v2.data.experimental.AUTOTUNE)
+            if with_meta:
+                dataset = dataset.map(self.train_data_setup,num_parallel_calls = tf.compat.v2.data.experimental.AUTOTUNE)
+                dataset = dataset.map(self.data_only_resize_with_meta,num_parallel_calls=tf.compat.v2.data.experimental.AUTOTUNE)
+            else:
+                dataset = dataset.map(self.data_only_resize,num_parallel_calls=tf.compat.v2.data.experimental.AUTOTUNE)
         else:
             pass 
         dataset = dataset.batch(self.batch_size)
@@ -252,7 +454,8 @@ class Dataset:
     
     def get_test_dataset(self,
                         labeled = False,
-                        ordered = True):
+                        ordered = True,
+                        with_meta = True):
         """
             Function for reading test dataset to make submission
             Args:
@@ -263,11 +466,29 @@ class Dataset:
         """
         dataset = self.load_dataset(self.test_files,
                                labeled=labeled,ordered=ordered)
-        dataset = dataset.map(self.data_only_resize,num_parallel_calls=tf.compat.v2.data.experimental.AUTOTUNE)
+        if with_meta: 
+            dataset = dataset.map(self.test_data_setup,num_parallel_calls=tf.compat.v2.data.experimental.AUTOTUNE)
+            dataset = dataset.map(self.data_only_resize_with_meta,num_parallel_calls=tf.compat.v2.data.experimental.AUTOTUNE)
+        else:
+            dataset = dataset.map(self.data_only_resize,num_parallel_calls=tf.compat.v2.data.experimental.AUTOTUNE)
         dataset = dataset.batch(self.batch_size)
         dataset = dataset.prefetch(tf.compat.v2.data.experimental.AUTOTUNE)
 
         return dataset
+    
+    def get_full_dataset(self,filenames):
+        """
+            Function compatible with load_full_dataset (but not with other functions)
+        """
+        
+        dataset = self.load_full_dataset(filenames)
+        dataset = dataset.map(self.full_data_setup,num_parallel_calls=tf.compat.v2.data.experimental.AUTOTUNE)
+        dataset = dataset.batch(self.batch_size)
+        dataset = dataset.prefetch(tf.compat.v2.data.experimental.AUTOTUNE)
+
+        return dataset
+    
+
     
     def fetch_train_iterator(self,data):
         """
@@ -277,7 +498,8 @@ class Dataset:
             - inputs - images with format [batch_size,image_width,image_height,num_channels]
             - output - label with format [batch_size,num_labels]
         """
-        yield from data
+        while True:
+            yield from data
         
     def fetch_valid_iterator(self,data):
         """
@@ -287,7 +509,8 @@ class Dataset:
             - output - label with format [batch_size,num_labels]
         """
         # Use only if you created validation dataset
-        yield from data
+        while True:
+            yield from data
     
     def get_train_steps_per_epoch(self):
         """
