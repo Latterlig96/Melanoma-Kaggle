@@ -170,4 +170,4 @@ class Fold_Creator:
             training_paths = [self.tfrecord_path[idx] for idx in trn_idx]
             validation_paths = [self.tfrecord_path[idx] for idx in val_idx]
 
-            yield training_paths,validation_paths
+            yield trn_idx,val_idx,training_paths,validation_paths
