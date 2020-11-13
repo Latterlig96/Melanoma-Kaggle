@@ -4,4 +4,4 @@ efficientnet==1.1.0
 opencv-python==4.2.0.34
 pandas==1.0.4
 tensorflow==2.2.1
-tensorflow-gpu==2.2.0
+tensorflow-gpu==2.3.1
